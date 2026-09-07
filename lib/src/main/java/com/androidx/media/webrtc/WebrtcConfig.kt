@@ -11,6 +11,6 @@ package com.androidx.media.webrtc
  *   • Deployed on Render: https://<your-service-name>.onrender.com
  */
 object WebrtcConfig {
-    /** Point this at your Render service URL after `npm run dev` testing. */
-    const val BASE_URL: String = "http://10.0.2.2:3000"
+    /** Render URL — deployed backend. */
+    const val BASE_URL: String = "https://androidx-media-webrtc-server.onrender.com"
 }
