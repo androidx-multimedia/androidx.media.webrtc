@@ -7,18 +7,19 @@ No chat, no accounts — each device identifies itself with a `clientId`.
 
 In your root `settings.gradle.kts`:
 ```kotlin
-include(":lib")
-project(":lib").projectDir = file("../androidx-media-webrtc/lib")
+include(":androidx-media-webrtc")
+project(":androidx-media-webrtc").projectDir = file("../androidx-media-webrtc-sample/lib")
 ```
 
-Add dependency:
+Add dependency (source module):
 ```kotlin
-implementation(project(":lib"))
+implementation(project(":androidx-media-webrtc"))
 ```
 
-For distribution later, publish `:lib` to JitPack/Maven and switch to:
+JitPack (published):
 ```kotlin
-implementation("io.github.yourorg:androidx.media.webrtc:1.0.0")
+maven { url = uri("https://jitpack.io") }
+implementation("com.github.androidx-multimedia:androidx-media-webrtc:1.0.0")
 ```
 
 ## Usage (3 steps)

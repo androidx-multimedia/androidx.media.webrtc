@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "androidx.media.webrtc"
-include(":lib")
+include(":androidx-media-webrtc")
 include(":sample")

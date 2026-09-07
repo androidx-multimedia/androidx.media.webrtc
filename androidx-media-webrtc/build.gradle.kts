@@ -1,6 +1,7 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    `maven-publish`
 }
 
 android {
@@ -38,4 +39,18 @@ dependencies {
 
     implementation("androidx.annotation:annotation:1.7.1")
     implementation("androidx.lifecycle:lifecycle-service:2.7.0")
+}
+
+// ── Publish for JitPack ──────────────────────────────────
+// JitPack sets group/version automatically from the repo (com.github.<user>:<tag>).
+// This publication just exposes the AAR under the "lib" module.
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                from(components["release"])
+                artifactId = project.name // androidx-media-webrtc → com.github.androidx-multimedia:androidx-media-webrtc:<tag>
+            }
+        }
+    }
 }
