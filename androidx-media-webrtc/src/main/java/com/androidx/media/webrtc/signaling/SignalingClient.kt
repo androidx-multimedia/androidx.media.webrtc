@@ -1,5 +1,6 @@
 package com.androidx.media.webrtc.signaling
 
+import io.socket.client.Ack
 import io.socket.client.IO
 import io.socket.client.Socket
 import org.json.JSONObject
@@ -52,11 +53,14 @@ class SignalingClient(
         if (ack == null) {
             s.emit(event, JSONObject(payload))
         } else {
-            s.emit(event, JSONObject(payload)) { args ->
-                @Suppress("UNCHECKED_CAST")
-                val ok = (args?.firstOrNull() as? Map<String, Any>)?.get("ok") as? Boolean ?: false
-                ack(ok)
+            val ackCallback = object : Ack {
+                override fun call(vararg args: Any?) {
+                    @Suppress("UNCHECKED_CAST")
+                    val ok = (args.firstOrNull() as? Map<String, Any>)?.get("ok") as? Boolean ?: false
+                    ack(ok)
+                }
             }
+            s.emit(event, JSONObject(payload), ackCallback)
         }
     }
 

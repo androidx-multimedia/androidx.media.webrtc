@@ -6,7 +6,10 @@ import android.media.AudioAttributes
 import android.os.Build
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
-import org.webrtc.CameraEnumerationAndroid
+import org.webrtc.Camera1Enumerator
+import org.webrtc.Camera2Enumerator
+import org.webrtc.CameraEnumerator
+import org.webrtc.CameraVideoCapturer
 import org.webrtc.EglBase
 import org.webrtc.MediaConstraints
 import org.webrtc.MediaStream
@@ -56,8 +59,6 @@ class WebRtcManager private constructor(context: Context) {
         val adm = JavaAudioDeviceModule.builder(appContext)
             .setUseHardwareAcousticEchoCanceler(true)
             .setUseHardwareNoiseSuppressor(true)
-            .setUseSoftwareAcousticEchoCanceler(false)
-            .setUseSoftwareNoiseSuppressor(false)
             .createAudioDeviceModule()
 
         // Default encoder/decoder factories ship hardware support (VP8/H264) with
@@ -76,32 +77,33 @@ class WebRtcManager private constructor(context: Context) {
             // Opus 48k, low-latency, echo/NS handled by the hardware ADM above
             mandatory.add(MediaConstraints.KeyValuePair("audio/opus", "1"))
         })
-        return audioSource?.createAudioTrack("audio0")
+        return audioSource?.let { factory?.createAudioTrack("audio0", it) }
     }
 
     fun hasCamera(): Boolean = appContext.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA)
 
     fun startVideoCapture() {
         if (videoCapturer != null || localVideoTrack != null) return
-        val capturer = when (isFrontCamera) {
-            true -> createCameraCapturer(CameraEnumerationAndroid.getDeviceNames().firstOrNull { it.contains("front", true) })
-            false -> createCameraCapturer(CameraEnumerationAndroid.getDeviceNames().firstOrNull { it.contains("back", true) })
-        } ?: return
+        val capturer = createCameraCapturer() ?: return
         videoCapturer = capturer
         videoSource = factory?.createVideoSource(capturer.isScreencast)
-        localVideoTrack = videoSource?.createVideoTrack("video0")
+        localVideoTrack = videoSource?.let { factory?.createVideoTrack("video0", it) }
         capturer.initialize(surfaceTextureHelper, appContext, videoSource!!.capturerObserver)
         val fps = 30
         val width = 1280; val height = 720 // 720p30 → good balance; falls back automatically
         capturer.startCapture(width, height, fps)
     }
 
-    private fun createCameraCapturer(names: Array<String>): VideoCapturer? {
-        for (name in names) {
-            val byName = CameraEnumerationAndroid.getCapturerByName(name)
-            if (byName != null) return byName
-        }
-        return CameraEnumerationAndroid.getDeviceNames().firstOrNull()?.let { CameraEnumerationAndroid.getCapturerByName(it) }
+    private fun createCameraCapturer(): VideoCapturer? {
+        val enumerator: CameraEnumerator =
+            if (Camera2Enumerator.isSupported(appContext)) Camera2Enumerator(appContext)
+            else Camera1Enumerator()
+        val names = enumerator.deviceNames
+        return when {
+            isFrontCamera -> names.firstOrNull { enumerator.isFrontFacing(it) }
+            else -> names.firstOrNull { enumerator.isBackFacing(it) }
+        }?.let { enumerator.createCapturer(it, null) }
+            ?: names.firstOrNull()?.let { enumerator.createCapturer(it, null) }
     }
 
     fun switchCamera() {
@@ -114,7 +116,7 @@ class WebRtcManager private constructor(context: Context) {
     fun createPeerConnection(iceServers: List<PeerConnection.IceServer>, pcObserver: PeerConnection.Observer): PeerConnection? {
         val config = PeerConnection.RTCConfiguration(iceServers).apply {
             sdpSemantics = org.webrtc.PeerConnection.SdpSemantics.UNIFIED_PLAN
-            bundlePolicy = PeerConnection.BundlePolicy.MAX_BUNDLE
+            bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
             rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
             iceCandidatePoolSize = 10 // pre-gather → faster connect
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY

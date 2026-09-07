@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.webrtc.PeerConnection
 import kotlin.coroutines.CoroutineContext
 
 /**
@@ -77,11 +78,26 @@ object WebrtcClient : CoroutineScope {
                 token = res.token
                 res.token
             }.onSuccess { tk ->
+                refreshIceServers()
                 signaling.connect(tk)
                 isConnected = true
                 onReady?.invoke()
             }.onFailure { e ->
                 onError?.invoke(e.message ?: "connect failed")
+            }
+        }
+    }
+
+    /** Pull /rtc/ice-config once so calls start with real STUN/TURN. */
+    private fun refreshIceServers() {
+        launch {
+            runCatching { ApiClient.get().service.iceConfig() }.onSuccess { cfg ->
+                callManager.iceServers = cfg.iceServers.map { s ->
+                    PeerConnection.IceServer.builder(s.urls)
+                        .setUsername(s.username)
+                        .setPassword(s.credential)
+                        .createIceServer()
+                }
             }
         }
     }

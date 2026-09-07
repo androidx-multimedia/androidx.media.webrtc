@@ -4,6 +4,8 @@ import com.androidx.media.webrtc.models.IceConfig
 import com.androidx.media.webrtc.models.LookupResponse
 import com.androidx.media.webrtc.models.RegisterResponse
 import com.androidx.media.webrtc.models.User
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -36,10 +38,13 @@ class ApiClient private constructor() {
             return instance ?: synchronized(this) {
                 instance ?: ApiClient().also {
                     val http = OkHttpClient.Builder().build()
+                    val moshi = Moshi.Builder()
+                        .add(KotlinJsonAdapterFactory())
+                        .build()
                     it.service = Retrofit.Builder()
                         .baseUrl(baseUrl.trimEnd('/') + "/")
                         .client(http)
-                        .addConverterFactory(MoshiConverterFactory.create())
+                        .addConverterFactory(MoshiConverterFactory.create(moshi))
                         .build()
                         .create(ApiService::class.java)
                 }

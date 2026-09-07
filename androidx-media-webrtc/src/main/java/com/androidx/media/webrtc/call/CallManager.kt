@@ -8,7 +8,6 @@ import com.androidx.media.webrtc.models.CallState
 import com.androidx.media.webrtc.models.CallType
 import com.androidx.media.webrtc.models.IncomingCall
 import com.androidx.media.webrtc.models.User
-import com.androidx.media.webrtc.rest.ApiClient
 import com.androidx.media.webrtc.signaling.SignalingClient
 import com.androidx.media.webrtc.utils.Json
 import org.webrtc.IceCandidate
@@ -46,6 +45,9 @@ class CallManager(
     private var peerUid: String? = null
     private var currentType: CallType = CallType.AUDIO
     private val pendingCandidates = LinkedBlockingQueue<IceCandidate>()
+
+    /** ICE servers fetched at connect time (see WebrtcClient). STUN fallback by default. */
+    var iceServers: List<PeerConnection.IceServer> = listOf(PeerConnection.IceServer("stun:stun.l.google.com:19302"))
 
     fun addListener(l: CallListener) { listeners.add(l) }
 
@@ -102,9 +104,10 @@ class CallManager(
     }
 
     // ── SDP / ICE ──────────────────────────────────────────
-    private fun createPeer() {
-        pc = webrtc.createPeerConnection(fetchIceConfig(), peerObserver())
+    private fun createPeer(): PeerConnection? {
+        pc = webrtc.createPeerConnection(iceServers, peerObserver())
         flushPendingCandidates()
+        return pc
     }
 
     private fun sendOffer() {
@@ -131,13 +134,13 @@ class CallManager(
     private fun handleOffer(payload: Map<String, Any>) {
         val sdp = Json.sdp(payload["sdp"]) ?: return
         peerUid = (payload["from"] as? String) ?: peerUid
-        val p = pc ?: createPeer()!!
+        val p = pc ?: createPeer() ?: return
         p.setRemoteDescription(remoteSetObserver(), SessionDescription(SessionDescription.Type.OFFER, sdp.description))
     }
 
     private fun handleAnswer(payload: Map<String, Any>) {
         val sdp = Json.sdp(payload["sdp"]) ?: return
-        val p = pc ?: createPeer()!!
+        val p = pc ?: createPeer() ?: return
         p.setRemoteDescription(remoteSetObserver(), SessionDescription(SessionDescription.Type.ANSWER, sdp.description))
     }
 
@@ -152,8 +155,8 @@ class CallManager(
         @Suppress("UNCHECKED_CAST")
         val m = payload["candidate"] as? Map<String, Any> ?: return
         val candidate = IceCandidate(
-            m["sdpMid"] as? String,
-            (m["sdpMLineIndex"] as? Number)?.toInt(),
+            m["sdpMid"] as? String ?: "",
+            (m["sdpMLineIndex"] as? Number)?.toInt() ?: 0,
             m["candidate"] as? String ?: return,
         )
         val p = pc
@@ -192,7 +195,7 @@ class CallManager(
             when (state) {
                 PeerConnection.IceConnectionState.CONNECTED -> {
                     setState(CallState.CONNECTED)
-                    currentRoomId?.let { listeners.forEach { it.onCallConnected(it) } }
+                    currentRoomId?.let { roomId -> listeners.forEach { listener -> listener.onCallConnected(roomId) } }
                 }
                 PeerConnection.IceConnectionState.DISCONNECTED -> {
                     // App can auto-reconnect; we only surface state change
@@ -267,18 +270,7 @@ class CallManager(
 
     private fun sdpConstraints() = MediaConstraints().apply {
         mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
-        mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", currentType == CallType.VIDEO))
-    }
-
-    private fun fetchIceConfig(): List<PeerConnection.IceServer> {
-        return try {
-            val cfg = ApiClient.get().service.iceConfig()
-            cfg.iceServers.map {
-                PeerConnection.IceServer.builder(it.urls).setUsername(it.username).setCredential(it.credential).createIceServer()
-            }
-        } catch (_: Exception) {
-            listOf(PeerConnection.IceServer("stun:stun.l.google.com:19302"))
-        }
+        mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", if (currentType == CallType.VIDEO) "true" else "false"))
     }
 
     private fun finish(reason: String) {
