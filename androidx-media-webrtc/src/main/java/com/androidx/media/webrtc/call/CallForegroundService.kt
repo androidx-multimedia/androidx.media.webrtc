@@ -10,6 +10,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 
 /** Keeps the call alive & visible while app is backgrounded (WhatsApp-style). */
 class CallForegroundService : Service() {
@@ -68,7 +69,7 @@ class CallForegroundService : Service() {
         fun start(context: Context, title: String) {
             val intent = Intent(context, CallForegroundService::class.java)
                 .putExtra(EXTRA_TITLE, title)
-            context.startForegroundService(intent)
+            ContextCompat.startForegroundService(context, intent)
         }
 
         fun stop(context: Context) {
